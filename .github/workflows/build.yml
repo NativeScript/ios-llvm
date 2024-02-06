@@ -1,0 +1,29 @@
+on:
+  push:
+    branches:
+      - buildscripts
+
+env:
+  LLVM_VERSION: 17.0.6
+jobs:
+  build:
+    name: Build
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-${{env.LLVM_VERSION}}
+      - name: Build
+        run: |
+          cmake -S llvm -B build_osx -G "Ninja" -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" -DLLVM_ENABLE_PROJECTS="clang;lld;polly" -DLLVM_ENABLE_ASSERTIONS=Off -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/tmp/llvm-arm64
+          cmake --build build_osx --target install
+      - name: Compress
+        run: |
+          cd /tmp
+          tar -czf llvm-arm64.tar.gz llvm-arm64
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: llvm-arm64
+          path: /tmp/llvm-arm64.tar.gz
