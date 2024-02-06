@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - buildscripts
+      - buildcripts
 
 env:
   LLVM_VERSION: 17.0.6
