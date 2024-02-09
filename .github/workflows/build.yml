@@ -2,6 +2,8 @@ on:
   push:
     branches:
       - buildscripts
+    tags:
+      - '*'
 
 env:
   LLVM_VERSION: 15.0.7
