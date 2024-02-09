@@ -1,0 +1,75 @@
+on:
+  push:
+    branches:
+      - buildscripts
+
+env:
+  LLVM_VERSION: 15.0.7
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+            upload_includes: true
+          - os: macos-14
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    env:
+      LLVM_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-${{env.LLVM_VERSION}}
+      - name: Install dependencies
+        run: |
+          brew install ninja
+      - name: Build
+        run: |
+          cmake -S llvm -B build_osx -G "Ninja" -DCMAKE_OSX_DEPLOYMENT_TARGET=11 -DCMAKE_OSX_ARCHITECTURES=$LLVM_ARCH -DLLVM_ENABLE_RUNTIMES="" -DLLVM_ENABLE_PROJECTS="clang;lld;polly" -DLLVM_ENABLE_ASSERTIONS=Off -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/tmp/llvm -DLLVM_ENABLE_ZSTD=Off -DLLVM_HOST_TRIPLE=$LLVM_ARCH-apple-darwin -DBUILD_SHARED_LIBS=Off
+          cmake --build build_osx --target install
+      - name: Generate artifact
+        run: |
+          cd /tmp/llvm
+          mkdir dist-lib
+          mv lib dist-lib/lib_$LLVM_ARCH
+          mkdir dist-include
+          mv include dist-include/include
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-lib-${{env.LLVM_ARCH}}
+          path: /tmp/llvm/dist-lib
+      - name: Upload includes
+        if: ${{ matrix.upload_includes }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-include
+          path: /tmp/llvm/dist-include
+  artifacts:
+    name: Assemble release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{env.LLVM_VERSION}}
+          pattern: llvm-*
+          merge-multiple: true
+      - name: Create archive
+        run: |
+          tar -czf llvm-$LLVM_VERSION.tgz $LLVM_VERSION
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-${{env.LLVM_VERSION}}
+          path: llvm-${{env.LLVM_VERSION}}.tgz
+      - uses: ncipollo/release-action@v1
+        if: ${{ contains(github.ref, 'refs/tags/') }}
+        with:
+          artifacts: llvm-${{env.LLVM_VERSION}}.tgz
