@@ -6,7 +6,8 @@ on:
       - '*'
 
 env:
-  LLVM_VERSION: 15.0.7
+  LLVM_VERSION: 17.0.6
+  APPLE_LLVM_TAG: swift-6.0-DEVELOPMENT-SNAPSHOT-2024-06-08-a
 jobs:
   build:
     strategy:
@@ -23,8 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: llvm/llvm-project
-          ref: llvmorg-${{env.LLVM_VERSION}}
+          repository: apple/llvm-project
+          ref: ${{env.APPLE_LLVM_TAG}}
       - name: Install dependencies
         run: |
           brew install ninja
