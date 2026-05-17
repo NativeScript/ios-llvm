@@ -6,17 +6,17 @@ on:
       - '*'
 
 env:
-  LLVM_VERSION: 17.0.7
-  APPLE_LLVM_TAG: swift-6.1.1-RELEASE
+  LLVM_VERSION: 21.0.0
+  APPLE_LLVM_TAG: swift-6.3.1-RELEASE
 jobs:
   build:
     strategy:
       matrix:
         include:
-          - os: macos-14
+          - os: macos-26
             arch: arm64
             upload_includes: true
-          - os: macos-14
+          - os: macos-26
             arch: x86_64
     runs-on: ${{ matrix.os }}
     env:
