@@ -15,6 +15,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-26
@@ -65,21 +66,23 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=Off \
             -DLLVM_ENABLE_ZSTD=Off \
             -DBUILD_SHARED_LIBS=Off \
-            -DLLVM_BUILD_TOOLS=Off \
             -DLLVM_INCLUDE_TESTS=Off \
             -DLLVM_INCLUDE_EXAMPLES=Off \
             -DLLVM_INCLUDE_BENCHMARKS=Off \
             -DLLVM_TOOL_LTO_BUILD=Off \
             -DLLVM_TOOL_REMARKS_SHLIB_BUILD=Off \
             -DLLVM_TOOL_LIBCASPLUGINTEST_BUILD=Off \
-            -DCLANG_BUILD_TOOLS=Off \
             -DCLANG_ENABLE_STATIC_ANALYZER=Off \
             -DCLANG_ENABLE_ARCMT=Off \
             -DCLANG_TOOL_LIBCLANG_BUILD=Off \
             -DCLANG_TOOL_C_INDEX_TEST_BUILD=Off \
             -DCLANG_TOOL_CLANG_SHLIB_BUILD=Off \
             -DCLANG_TOOL_INDEXSTORE_BUILD=Off
-          cmake --build build_osx --target install
+          # Install only the shipped components; a plain `install` also builds
+          # every tool and test executable.
+          cmake --build build_osx --target \
+            install-llvm-libraries install-llvm-headers \
+            install-clang-libraries install-clang-headers install-clang-resource-headers
           ccache -s
       - name: Save ccache
         if: always()
@@ -104,6 +107,9 @@ jobs:
             [ -f "lib/lib$l.a" ] || { echo "missing lib/lib$l.a"; exit 1; }
           done
           ls lib/clang/*/include/stddef.h lib/clang/*/include/arm_neon.h
+          ls include/clang-c/Index.h include/llvm-c/Types.h include/llvm/Config/llvm-config.h \
+             include/clang/AST/RecursiveASTVisitor.h include/clang/Basic/DiagnosticCommonKinds.inc \
+             include/llvm/IR/Attributes.inc
           du -sh include lib
           ls lib/*.a | wc -l
       - name: Create archive
