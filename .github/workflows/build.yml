@@ -34,6 +34,10 @@ jobs:
           repository: swiftlang/llvm-project
           ref: ${{ env.APPLE_LLVM_TAG }}
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ios-llvm
+          persist-credentials: false
       - name: Install dependencies
         run: |
           brew install ninja ccache
@@ -45,44 +49,12 @@ jobs:
           restore-keys: |
             ccache-${{ matrix.os }}-${{ matrix.arch }}-${{ env.APPLE_LLVM_TAG }}-
             ccache-${{ matrix.os }}-${{ matrix.arch }}-
+      - name: Configure
+        run: ios-llvm/build.sh configure --arch $LLVM_ARCH --source . --build-dir build_osx --ccache
       - name: Build
-        # Consumers only use the static clang/LLVM archives, their headers and
-        # clang's builtin headers (lib/clang/<ver>/include). The metadata
-        # generator links the archives statically and needs no LLVM backend,
-        # shared library or tool.
         run: |
           ccache -z
-          cmake -S llvm -B build_osx -G "Ninja" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/tmp/llvm \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=11 \
-            -DCMAKE_OSX_ARCHITECTURES=$LLVM_ARCH \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DLLVM_HOST_TRIPLE=$LLVM_ARCH-apple-darwin \
-            -DLLVM_ENABLE_PROJECTS="clang" \
-            -DLLVM_ENABLE_RUNTIMES="" \
-            -DLLVM_TARGETS_TO_BUILD="AArch64;X86" \
-            -DLLVM_ENABLE_ASSERTIONS=Off \
-            -DLLVM_ENABLE_ZSTD=Off \
-            -DBUILD_SHARED_LIBS=Off \
-            -DLLVM_INCLUDE_TESTS=Off \
-            -DLLVM_INCLUDE_EXAMPLES=Off \
-            -DLLVM_INCLUDE_BENCHMARKS=Off \
-            -DLLVM_TOOL_LTO_BUILD=Off \
-            -DLLVM_TOOL_REMARKS_SHLIB_BUILD=Off \
-            -DLLVM_TOOL_LIBCASPLUGINTEST_BUILD=Off \
-            -DCLANG_ENABLE_STATIC_ANALYZER=Off \
-            -DCLANG_ENABLE_ARCMT=Off \
-            -DCLANG_TOOL_LIBCLANG_BUILD=Off \
-            -DCLANG_TOOL_C_INDEX_TEST_BUILD=Off \
-            -DCLANG_TOOL_CLANG_SHLIB_BUILD=Off \
-            -DCLANG_TOOL_INDEXSTORE_BUILD=Off
-          # Install only the shipped components; a plain `install` also builds
-          # every tool and test executable.
-          cmake --build build_osx --target \
-            install-llvm-libraries install-llvm-headers \
-            install-clang-libraries install-clang-headers install-clang-resource-headers
+          ios-llvm/build.sh build --arch $LLVM_ARCH --build-dir build_osx
           ccache -s
       - name: Save ccache
         if: always()
@@ -91,39 +63,14 @@ jobs:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ matrix.os }}-${{ matrix.arch }}-${{ env.APPLE_LLVM_TAG }}-${{ github.run_id }}
       - name: Check install contents
-        run: |
-          cd /tmp/llvm
-          shared=$(find lib \( -name '*.dylib' -o -name '*.so' \))
-          if [ -n "$shared" ]; then
-            echo "unexpected shared libraries:"; echo "$shared"; exit 1
-          fi
-          # Every archive the metadata generator links, plus the builtin headers it parses with.
-          for l in clangTooling clangFrontend clangDriver clangSerialization clangParse clangSema \
-                   clangAnalysis clangASTMatchers clangEdit clangAST clangLex clangAPINotes clangCAS \
-                   clangSupport clangBasic LLVMFrontendOpenMP LLVMOption LLVMObject LLVMTextAPI \
-                   LLVMIRReader LLVMAsmParser LLVMBitReader LLVMMCParser LLVMMC LLVMDebugInfoDWARF \
-                   LLVMDebugInfoCodeView LLVMProfileData LLVMCore LLVMRemarks LLVMBitstreamReader \
-                   LLVMBinaryFormat LLVMCAS LLVMTargetParser LLVMWindowsDriver LLVMSupport LLVMDemangle; do
-            [ -f "lib/lib$l.a" ] || { echo "missing lib/lib$l.a"; exit 1; }
-          done
-          ls lib/clang/*/include/stddef.h lib/clang/*/include/arm_neon.h
-          ls include/clang-c/Index.h include/llvm-c/Types.h include/llvm/Config/llvm-config.h \
-             include/clang/AST/RecursiveASTVisitor.h include/clang/Basic/DiagnosticCommonKinds.inc \
-             include/llvm/IR/Attributes.inc
-          du -sh include lib
-          ls lib/*.a | wc -l
+        run: ios-llvm/build.sh check --arch $LLVM_ARCH --build-dir build_osx
       - name: Create archive
-        run: |
-          mkdir -p dist/$LLVM_VERSION
-          mv /tmp/llvm/include dist/$LLVM_VERSION/include
-          mv /tmp/llvm/lib dist/$LLVM_VERSION/lib_$LLVM_ARCH
-          tar -czf llvm-$LLVM_VERSION-$LLVM_ARCH.tgz -C dist $LLVM_VERSION
-          ls -la llvm-$LLVM_VERSION-$LLVM_ARCH.tgz
+        run: ios-llvm/build.sh package --arch $LLVM_ARCH --build-dir build_osx --version $LLVM_VERSION --out-dir dist
       - name: Upload archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: llvm-${{ env.LLVM_VERSION }}-${{ env.LLVM_ARCH }}
-          path: llvm-${{ env.LLVM_VERSION }}-${{ env.LLVM_ARCH }}.tgz
+          path: dist/llvm-${{ env.LLVM_VERSION }}-${{ env.LLVM_ARCH }}.tgz
           compression-level: 0
   release:
     name: Release
